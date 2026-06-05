@@ -1,0 +1,13 @@
+# Tema com as cores da AnimaTherapy
+[theme]
+primaryColor = "#5BA3C7"            # azul da marca (botões/destaques)
+backgroundColor = "#FFFFFF"          # fundo branco
+secondaryBackgroundColor = "#EAF5FB" # azul bem clarinho (caixas/tabelas)
+textColor = "#1F2D3D"                # quase preto (texto)
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false
+
+[server]
+headless = false

@@ -1,0 +1,15 @@
+# ===== NUNCA enviar pro GitHub =====
+# Segredos
+.env
+
+# Dados privados (clientes e banco)
+pagamentos.csv
+pagamentos_backup_status_unico.csv
+extrato-themis.csv
+
+# ===== Lixo técnico (não precisa versionar) =====
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
