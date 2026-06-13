@@ -13,8 +13,7 @@ import streamlit as st
 
 from gestao import atualizar_status, adicionar_atendimento, abrir_mes
 from conciliacao import conciliar, aplicar_conciliacao
-
-ARQUIVO = "pagamentos.csv"
+import db
 
 # Opções do "o que aconteceu" -> código do evento
 EVENTOS = {
@@ -49,7 +48,7 @@ def reais(valor):
 
 
 def carregar():
-    df = pd.read_csv(ARQUIVO, dtype=str).fillna("")
+    df = db.carregar_df()
     df["liq"] = pd.to_numeric(df["ValorLiquido"], errors="coerce").fillna(0.0)
     valor = pd.to_numeric(df["Valor"], errors="coerce").fillna(0.0)
     desc = pd.to_numeric(df["Descontos"], errors="coerce").fillna(0.0)
@@ -69,12 +68,38 @@ def carregar():
 # ---------- Configuração da página ----------
 st.set_page_config(page_title="AnimaTherapy", page_icon="🐾", layout="wide")
 
+
+# ---------- Tela de login ----------
+def tela_login():
+    col_c, col_m, col_c2 = st.columns([1, 2, 1])
+    with col_m:
+        st.image("logo.png", use_container_width=True)
+        st.title("Área Restrita 🔒")
+        st.caption("Controle de Pagamentos — AnimaTherapy")
+        senha = st.text_input("Senha", type="password", placeholder="Digite sua senha...")
+        if st.button("Entrar  →", type="primary", use_container_width=True):
+            if senha == st.secrets["senha"]:
+                st.session_state["autenticada"] = True
+                st.rerun()
+            else:
+                st.error("Senha incorreta. Tente novamente.")
+
+
+if not st.session_state.get("autenticada"):
+    tela_login()
+    st.stop()
+
+
+# ---------- Cabeçalho (só aparece após o login) ----------
 col_logo, col_tit = st.columns([1, 3], vertical_alignment="center")
 with col_logo:
     st.image("logo.png", use_container_width=True)
 with col_tit:
     st.title("Controle de Pagamentos")
     st.caption("Terapia para cães e gatos 🐾")
+    if st.button("Sair  🔓", key="logout"):
+        st.session_state["autenticada"] = False
+        st.rerun()
 
 df = carregar()
 
@@ -222,7 +247,7 @@ tabela.columns = ["Data", "Tutor", "Pet", "Atendimento", "Pagamento", "Líquido 
 st.dataframe(tabela, use_container_width=True, hide_index=True)
 
 st.caption(f"Total de {len(dfm)} atendimentos em {mes}. "
-           "Fonte: pagamentos.csv (a planilha do Google é o backup).")
+           "Fonte: Supabase (banco de dados na nuvem) ☁️")
 
 st.divider()
 

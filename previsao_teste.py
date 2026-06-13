@@ -4,11 +4,10 @@
 #  de cada paciente (dia da semana + frequência).
 # ==========================================================
 
-import csv
 from datetime import date, timedelta
 import holidays   # peça que conhece os feriados nacionais do Brasil
 
-ARQUIVO = "pagamentos.csv"
+import db
 
 # --- Cadastro dos pacientes (confirmado por você) ---
 # match  = parte do nome do tutor pra achar nos dados
@@ -58,8 +57,7 @@ def feriados_do_ano(ano):
 
 def ultima_data_real(match):
     """Acha o atendimento mais recente (de 2026) de um paciente nos dados."""
-    with open(ARQUIVO, encoding="utf-8") as f:
-        linhas = list(csv.DictReader(f))
+    linhas = db.carregar_linhas()
     datas = []
     for l in linhas:
         if match.lower() in l["Tutor"].lower():

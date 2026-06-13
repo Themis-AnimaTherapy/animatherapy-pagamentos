@@ -1,27 +1,19 @@
 # ==========================================================
-#  Gestão dos atendimentos — Peça 2: "Abrir o mês"
-#  Gera os atendimentos PREVISTOS de um mês (a partir da
-#  recorrência), pra você depois ir marcando o que aconteceu.
+#  Gestão dos atendimentos — "Abrir o mês" e atualizar status
+#  Gera os atendimentos PREVISTOS e registra o que aconteceu.
 # ==========================================================
 
-import csv
 from datetime import date, timedelta
 
 # Reaproveita o cadastro e as regras de recorrência/feriado
 from previsao_teste import PACIENTES, feriados_do_ano, ultima_data_real, NUM_MES, MESES
 
-ARQUIVO = "pagamentos.csv"
-CAMPOS = ["Mes", "Ano", "Data", "Tutor", "Pet", "Valor", "Descontos", "ValorLiquido",
-          "DataRecebimento", "FormaPagamento", "Status_Atendimento", "Status_Pagamento", "OBS"]
+import db   # camada de acesso ao banco (Supabase)
 
 
 def mes_ja_aberto(mes, ano):
     """Verifica se já existem lançamentos desse mês (pra não duplicar)."""
-    with open(ARQUIVO, encoding="utf-8") as f:
-        for l in csv.DictReader(f):
-            if l["Mes"].lower() == mes.lower() and str(l["Ano"]) == str(ano):
-                return True
-    return False
+    return db.mes_ja_aberto(mes, ano)
 
 
 def gerar_previstos(mes, ano):
@@ -69,9 +61,7 @@ def abrir_mes(mes, ano, confirmar=False):
     linhas = gerar_previstos(mes, ano)
 
     if confirmar:
-        with open(ARQUIVO, "a", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=CAMPOS)
-            w.writerows(linhas)
+        db.inserir_linhas(linhas)
 
     return {"ok": True, "gravado": confirmar, "qtd": len(linhas), "linhas": linhas}
 
@@ -115,21 +105,19 @@ def adicionar_atendimento(tutor, data, pet, valor, desconto=0.0, obs="", confirm
     }
 
     if confirmar:
-        with open(ARQUIVO, "a", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=CAMPOS)
-            w.writerow(nova)
+        db.inserir_linhas([nova])
 
     return {"ok": True, "gravado": confirmar, "linha": nova}
 
 
 def atualizar_status(tutor, data, evento, pet=None, confirmar=False):
     """Atualiza o status de um atendimento conforme o que aconteceu.
-       evento: 'atendido', 'cancelado_themis', 'cancelado_cliente', 'feriado', 'ferias'.
+       evento: 'atendido', 'cancelado_themis', 'cancelado_cliente',
+               'reposicao', 'feriado', 'ferias'.
        Para antecipados (Flor/Lucas), cancelamento gera reposição no mês seguinte."""
     data_n = _normaliza_data(data)
 
-    with open(ARQUIVO, encoding="utf-8") as f:
-        linhas = list(csv.DictReader(f))
+    linhas = db.carregar_linhas()
 
     # Acha as linhas do atendimento (um dia pode ter vários pets)
     alvos = [l for l in linhas
@@ -141,6 +129,7 @@ def atualizar_status(tutor, data, evento, pet=None, confirmar=False):
 
     antecip = _e_antecipado(tutor)
     mudancas = []
+    linhas_a_salvar = list(alvos)   # começa com as linhas do atendimento principal
 
     for l in alvos:
         antes = f'{l["Status_Atendimento"]} / {l["Status_Pagamento"]}'
@@ -191,32 +180,33 @@ def atualizar_status(tutor, data, evento, pet=None, confirmar=False):
         previstos.sort(key=lambda r: tuple(reversed(r["Data"].split("/"))))
         n = len(alvos)
         if previstos:
-            for l in previstos[:n]:
+            repos = previstos[:n]
+            for l in repos:
                 l["Status_Atendimento"] = "Reposição"
                 l["Status_Pagamento"] = "Reposição"
                 l["ValorLiquido"] = "0.00"
+            linhas_a_salvar.extend(repos)   # inclui reposições para salvar
             reposicao = f"Marquei {min(n, len(previstos))} reposição(ões) em {prox_nome} (líquido R$ 0)."
         else:
             reposicao = (f"⚠️ {prox_nome} ainda não está aberto. Quando abrir, lembre de marcar "
                          f"{n} reposição(ões) da {tutor}.")
 
     if confirmar:
-        with open(ARQUIVO, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=CAMPOS)
-            w.writeheader()
-            w.writerows(linhas)
+        campos = ["Status_Atendimento", "Status_Pagamento", "ValorLiquido"]
+        for l in linhas_a_salvar:
+            db.salvar_linha(l["_id"], {c: l[c] for c in campos})
 
     return {"ok": True, "gravado": confirmar, "tutor": tutor, "data": data_n,
             "evento": evento, "mudancas": mudancas, "reposicao": reposicao}
 
 
-# ---- Demonstração: PRÉVIA de junho (não grava) ----
+# ---- Demonstração: PRÉVIA de julho (não grava) ----
 if __name__ == "__main__":
-    res = abrir_mes("Junho", 2026, confirmar=False)
+    res = abrir_mes("Julho", 2026, confirmar=False)
     if not res["ok"]:
         print("⚠️", res["msg"])
     else:
-        print(f"PRÉVIA — {res['qtd']} atendimentos previstos para Junho (nada gravado ainda):")
+        print(f"PRÉVIA — {res['qtd']} atendimentos previstos para Julho (nada gravado ainda):")
         print("=" * 60)
         for l in res["linhas"]:
             print(f"  {l['Data']}  {l['Tutor']:24s} {l['Pet']:18s} líq R$ {l['ValorLiquido']}")

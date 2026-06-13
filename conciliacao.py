@@ -8,11 +8,9 @@
 import csv
 from datetime import date
 
-ARQUIVO = "pagamentos.csv"
-EXTRATO = "extrato-themis.csv"
+import db   # camada de acesso ao banco (Supabase)
 
-CAMPOS = ["Mes", "Ano", "Data", "Tutor", "Pet", "Valor", "Descontos", "ValorLiquido",
-          "DataRecebimento", "FormaPagamento", "Status_Atendimento", "Status_Pagamento", "OBS"]
+EXTRATO = "extrato-themis.csv"
 
 # DE-PARA: nome como aparece no banco -> apelido do cliente no controle
 DE_PARA = {
@@ -105,8 +103,7 @@ def _acha_subconjunto(itens, alvo_cent):
 def conciliar(extrato=EXTRATO, linhas=None):
     """Gera o relatório de conciliação (NÃO grava nada)."""
     if linhas is None:
-        with open(ARQUIVO, encoding="utf-8") as f:
-            linhas = list(csv.DictReader(f))
+        linhas = db.carregar_linhas()
 
     usados = set()      # índices de pendências já casadas
     relatorio = []
@@ -160,11 +157,12 @@ def conciliar(extrato=EXTRATO, linhas=None):
 def aplicar_conciliacao(extrato=EXTRATO, confirmar=False):
     """Marca como Pago os atendimentos que a conciliação casou.
        Só GRAVA se confirmar=True."""
-    with open(ARQUIVO, encoding="utf-8") as f:
-        linhas = list(csv.DictReader(f))
+    linhas = db.carregar_linhas()
 
     rel = conciliar(extrato, linhas)   # usa a MESMA lista, índices batem
     mudancas = []
+    linhas_modificadas = []
+
     for r in rel:
         if r["status"] != "conciliado":
             continue
@@ -174,15 +172,15 @@ def aplicar_conciliacao(extrato=EXTRATO, confirmar=False):
             linhas[i]["Status_Pagamento"] = "Pago"
             linhas[i]["DataRecebimento"] = data_rec
             linhas[i]["FormaPagamento"] = "Pix"
+            linhas_modificadas.append(linhas[i])
             mudancas.append({"data": linhas[i]["Data"], "tutor": linhas[i]["Tutor"],
                              "pet": linhas[i]["Pet"], "liq": linhas[i]["ValorLiquido"],
                              "recebido_em": data_rec})
 
     if confirmar and mudancas:
-        with open(ARQUIVO, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=CAMPOS)
-            w.writeheader()
-            w.writerows(linhas)
+        campos = ["Status_Pagamento", "DataRecebimento", "FormaPagamento"]
+        for l in linhas_modificadas:
+            db.salvar_linha(l["_id"], {c: l[c] for c in campos})
 
     return {"ok": True, "gravado": confirmar, "qtd": len(mudancas), "mudancas": mudancas}
 
@@ -190,7 +188,7 @@ def aplicar_conciliacao(extrato=EXTRATO, confirmar=False):
 # ---- Demonstração: relatório do extrato (não grava nada) ----
 if __name__ == "__main__":
     rel = conciliar()
-    print("RELATÓRIO DE CONCILIAÇÃO — extrato de maio")
+    print("RELATÓRIO DE CONCILIAÇÃO")
     print("=" * 60)
     for r in rel:
         if r["status"] == "conciliado":
